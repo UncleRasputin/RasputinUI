@@ -30,14 +30,23 @@ Each Control has a ControlTheme.
 Each ControlTheme contains 4 ControlStyles: Default, Disabled, Hover, Active.
 
 Each Style has the following properties:
+
  olc::Pixel	ForegroundColor;
+ 
  olc::Pixel 	BackgroundColor;
+ 
  FullAlignment 	TextAlign;
+ 
  olc::vf2d 	TextScale;
+ 
  Spacing 	Padding;
+ 
  olc::Decal *	BackgroundDecal;
+ 
  FullAlignment 	BackgroundDecalAlign;
+ 
  olc::vf2d 	BackgroundDecalScale;
+ 
 
 The control will theme based on its state at render time each frame.
 If you want to use default for any state other than default, you can:
