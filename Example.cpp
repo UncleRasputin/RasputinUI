@@ -1,5 +1,6 @@
-#include "RasputinUI.h"
+#define OLC_PGE_APPLICATION
 
+#include "RasputinUI.h"
 class Example : public olc::PixelGameEngine
 {
 private:
@@ -20,12 +21,12 @@ private:
 		ButtonTheme.Default.ForegroundColor = olc::GREEN;
 		ButtonTheme.Default.TextScale = { 1,1 };
 
-		ButtonTheme.Hover = ButtonTheme.Default.Dupe();
+		ButtonTheme.Hover = ButtonTheme.Default.DeepCopy();
 		ButtonTheme.Hover.BackgroundColor = olc::BLANK;
 		ButtonTheme.Hover.BackgroundDecal = decButtonHover;
 		ButtonTheme.Hover.ForegroundColor = olc::BLACK;
 
-		ButtonTheme.Disabled = ButtonTheme.Default.Dupe();
+		ButtonTheme.Disabled = ButtonTheme.Default.DeepCopy();
 		ButtonTheme.Disabled.BackgroundColor = olc::BLANK;
 		ButtonTheme.Disabled.BackgroundDecal = decButtonDisabled;
 		ButtonTheme.Disabled.ForegroundColor = olc::VERY_DARK_GREY;
@@ -35,17 +36,17 @@ private:
 		TextBarTheme.Default.Padding = { 4,4,4,4 };
 		TextBarTheme.Default.ForegroundColor = olc::WHITE;
 
-		TextBarTheme.Hover = TextBarTheme.Default.Dupe();
+		TextBarTheme.Hover = TextBarTheme.Default.DeepCopy();
 		TextBarTheme.Hover.BackgroundColor = olc::GREY;
 
 		ListItemTheme.Default.BackgroundColor = olc::Pixel(0, 0, 0, 20);;
 		ListItemTheme.Default.Padding = { 4,4,4,4 };
 		ListItemTheme.Default.ForegroundColor = olc::WHITE;
 
-		ListItemTheme.Hover = ListItemTheme.Default.Dupe();
+		ListItemTheme.Hover = ListItemTheme.Default.DeepCopy();
 		ListItemTheme.Hover.BackgroundColor = olc::Pixel(0, 0, 0, 50);
 
-		ListItemTheme.Active = ListItemTheme.Default.Dupe();
+		ListItemTheme.Active = ListItemTheme.Default.DeepCopy();
 		ListItemTheme.Active.BackgroundColor = olc::RED;
 
 	}
