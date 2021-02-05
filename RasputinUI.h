@@ -1,6 +1,3 @@
-#pragma once
-#define OLC_PGE_APPLICATION
-#include "olcPixelGameEngine.h"
 /*
 Totally free UI from Rasputin (aka UncleTime)
 
@@ -12,6 +9,12 @@ If you make changes or derive from it to add functionality, consider sharing it 
 
 Requires olcPixelGameEngine.h
 */
+
+#ifndef RASPUTIN_UI_DEF
+
+#define RASPUTIN_UI_DEF
+
+#include "olcPixelGameEngine.h"
 
 namespace RasputinUI
 {
@@ -76,7 +79,7 @@ namespace RasputinUI
 
 	class ControlBase;
 
-	typedef std::list<ControlBase*> ControlList;
+	//typedef std::list<ControlBase*> ControlList;
 
 	struct ControlStyle
 	{
@@ -96,7 +99,7 @@ namespace RasputinUI
 			return result;
 		}
 
-		ControlStyle Dupe()
+		ControlStyle DeepCopy()
 		{
 			ControlStyle result;
 			result.empty = empty;
@@ -131,13 +134,13 @@ namespace RasputinUI
 			return Default;
 		}
 
-		ControlTheme Dupe()
+		ControlTheme DeepCopy()
 		{
 			ControlTheme result;
-			result.Disabled = Disabled.Dupe();
-			result.Default = Default.Dupe();
-			result.Hover = Hover.Dupe();
-			result.Active = Active.Dupe();
+			result.Disabled = Disabled.DeepCopy();
+			result.Default = Default.DeepCopy();
+			result.Hover = Hover.DeepCopy();
+			result.Active = Active.DeepCopy();
 			return result;
 		}
 	};
@@ -153,7 +156,7 @@ namespace RasputinUI
 		bool Active = false;
 		bool Enabled = true;
 		std::string Name = "";
-		ControlList Controls;
+		std::list<ControlBase*> Controls;
 		bool Hovering = false;
 
 		ControlBase(Rect location, ControlBase *parent = NULL)
@@ -187,11 +190,10 @@ namespace RasputinUI
 			DrawCustom(pge);
 			DrawText(pge);
 
-			for (ControlList::iterator iter = Controls.begin(); iter != Controls.end(); ++iter)
+			for (auto control : Controls)
 			{
-				(*iter)->Render(pge);
+				control->Render(pge);
 			}
-
 		}
 
 		virtual ControlBase *MouseOver(olc::vi2d mpos)
@@ -201,9 +203,9 @@ namespace RasputinUI
 			sRect.Size = Location.Size;
 			if (Enabled && sRect.Contains(mpos))
 			{
-				for (ControlList::iterator iter = Controls.begin(); iter != Controls.end(); ++iter)
+				for (auto control : Controls)
 				{
-					ControlBase *res = (*iter)->MouseOver(mpos);
+					ControlBase *res = control->MouseOver(mpos);
 					if (res != NULL)
 					{
 						Hovering = false;
@@ -219,7 +221,7 @@ namespace RasputinUI
 
 		void ApplyTheme(ControlTheme theme)
 		{
-			Theme = theme.Dupe();
+			Theme = theme.DeepCopy();
 		}
 
 	protected:
@@ -364,9 +366,9 @@ namespace RasputinUI
 
 		void SetItems(std::vector<std::string> items)
 		{
-			for (ControlList::iterator iter = Controls.begin(); iter != Controls.end(); ++iter)
+			for (auto control : Controls)
 			{
-				try { delete (*iter); }
+				try { delete control; }
 				catch (...) {} // not managed by ui manager!
 			}
 			Controls.clear();
@@ -488,7 +490,7 @@ namespace RasputinUI
 	private:
 		olc::PixelGameEngine *PGE;
 		ControlBase* curControl = NULL;
-		ControlList m_controls;
+		std::vector<ControlBase *> m_controls;
 	public:
 
 		UIManager(olc::PixelGameEngine *pge)
@@ -499,11 +501,11 @@ namespace RasputinUI
 
 		~UIManager()
 		{  // if we have a control in our control list, lets make sure its deleted
-			for (ControlList::iterator iter = m_controls.begin(); iter != m_controls.end(); ++iter)
+			for (auto control : Controls)
 			{
 				try
 				{
-					delete (*iter);
+					delete control;
 				}
 				catch(...) {}
 			}
@@ -547,3 +549,5 @@ namespace RasputinUI
 
 	};
 }
+
+#endif
