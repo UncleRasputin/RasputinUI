@@ -18,6 +18,7 @@ Requires olcPixelGameEngine.h
 
 namespace RasputinUI
 {
+	/* Rectangle class, not strictly needed, but makes some calculations more convenient*/
 	struct Rect
 	{
 		olc::vi2d Position;
@@ -55,11 +56,13 @@ namespace RasputinUI
 		}
 	};
 
+	/* Alignment: a basic Near/Center/Far alignment system */
 	enum Alignment
 	{
 		Near, Far, Center
 	};
 
+	/* Spacing: a structure to define space around an object, like margins or padding.  4 values: top,right,bottom,left (starts at top and continues clockwise)*/
 	struct Spacing
 	{
 		int top;
@@ -71,16 +74,14 @@ namespace RasputinUI
 		int horiz() { return left + right; }
 	};
 
+	/* FullAlignment: a structure containing both Horizontal and Vertical alignment */
 	struct FullAlignment
 	{
 		Alignment Horizontal;
 		Alignment Vertical;
 	};
 
-	class ControlBase;
-
-	//typedef std::list<ControlBase*> ControlList;
-
+	/* ControlStyle: determines the appearance of a control */
 	struct ControlStyle
 	{
 		bool empty = false; // set this to true to make it be ignored
@@ -115,6 +116,7 @@ namespace RasputinUI
 		}
 	};
 
+	/* ControlTheme: allows a control to have varied ControlStyle based on it's state (Enabled, Default, Active, Hover) */
 	struct ControlTheme
 	{
 		ControlStyle Disabled=ControlStyle::Empty();
@@ -145,20 +147,43 @@ namespace RasputinUI
 		}
 	};
 
+	/* ControlBase: the base control for the UI system. This can be used as a label, a panel, a button, an image, just about anything.  
+		You can also derive from it and create addition custom controls, as well as build composite controls.
+	*/
 	class ControlBase
 	{
 	public:
+		/* OnClick: Event handler, invoked when any (left,right,middle) mouse buttons are pressed while over this control, AND it was enabled. */
 		std::function<void(ControlBase*, int)> OnClick;
+
+		/* Location: The controls location and size, relative to its parent */
 		Rect Location;
+
+		/* Parent: The control's parent if any */
 		ControlBase *Parent = NULL;
+
+		/* Theme: the ControlTheme for this control */
 		ControlTheme Theme;
+
+		/* Text: Any text to display on this control.  Text Scale and Text Align will be used to determine its size and location */
 		std::string Text;
+
+		/* Active: wether the control is currently "Active" is used for an additional state to be used differently as needed.  In list items, it can serve as the selected item color, for example. */
 		bool Active = false;
+
+		/* Enabled: wether the control uses its Disabled state (if not .empty), and wether it responds to hover and click state transitions */
 		bool Enabled = true;
+
+		/* Name: entirely an external ID to allow you to track where an event came from */
 		std::string Name = "";
+
+		/* Controls: all Controls ARE containers, so we need a list of controls, to render and manage user input */
 		std::list<ControlBase*> Controls;
+
+		/* Hovering: is the mouse currently hovering over this control... don't set it unless you are writing an input handler, but it can be read any time */
 		bool Hovering = false;
 
+		/* Constructor: Basic constructor for a control to create it within a parent */
 		ControlBase(Rect location, ControlBase *parent = NULL)
 		{
 			Theme.Default.ForegroundColor = olc::WHITE;
@@ -170,6 +195,7 @@ namespace RasputinUI
 			}
 		}
 
+		/* Constructor: create a control within a parent and set its theme */
 		ControlBase(Rect location, ControlTheme theme, ControlBase *parent = NULL)
 		{
 			Location = location;
@@ -182,20 +208,10 @@ namespace RasputinUI
 			}
 		}
 
+		/* Constructor: base simple constructor for future expansion and complex custom controls */
 		ControlBase() { Theme.Default.ForegroundColor = olc::WHITE; } // just so by default objects show text
 
-		virtual void Render(olc::PixelGameEngine *pge)
-		{
-			DrawBackground(pge);
-			DrawCustom(pge);
-			DrawText(pge);
-
-			for (auto control : Controls)
-			{
-				control->Render(pge);
-			}
-		}
-
+		/* MouseOver: meant to be handled in the OnUserUpdate call in olcPixelGameEngine, with the mouse coordinates, to handle mouse interaction */
 		virtual ControlBase *MouseOver(olc::vi2d mpos)
 		{
 			Rect sRect;
@@ -219,12 +235,14 @@ namespace RasputinUI
 			return NULL;
 		}
 
+		/* ApplyTheme: Change the theme of a control.  individual aspects of a theme can also be changed at any time. */
 		void ApplyTheme(ControlTheme theme)
 		{
 			Theme = theme.DeepCopy();
 		}
 
 	protected:
+		/* ScreenPos: Our location in screen space */
 		olc::vi2d ScreenPos()
 		{
 			int x = 0;
@@ -239,6 +257,21 @@ namespace RasputinUI
 			return { x,y };
 		}
 
+		/* Render: How we draw!  This can be completely overridden, and each piece can be as well,
+		   DrawBackground, DrawCustom, and DrawText are called, in that order, and are all virtual and can be overridden */
+		virtual void Render(olc::PixelGameEngine* pge)
+		{
+			DrawBackground(pge);
+			DrawCustom(pge);
+			DrawText(pge);
+
+			for (auto control : Controls)
+			{
+				control->Render(pge);
+			}
+		}
+
+		/* GetClientRect: get the rectangle defined by the control, minus its padding. */
 		virtual Rect GetClientRect()
 		{
 			ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
@@ -252,6 +285,8 @@ namespace RasputinUI
 			return result;
 		}
 
+		/* DrawBackground: The basic draw background, which fills the control with BackgroundColor.
+			It will also draw BackgroundDecal if one is available, using the current scaling and alignment settings	*/
 		virtual void DrawBackground(olc::PixelGameEngine *pge)
 		{
 			ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
@@ -280,8 +315,10 @@ namespace RasputinUI
 			}
 		}
 
+		/* DrawCustom: A layer to draw anything needed for custom controls, sits between the foreground and background. */
 		virtual void DrawCustom(olc::PixelGameEngine *pge) { }
 
+		/* DrawText: The text positioning and drawing layer, handles proper color, scaling, position. */
 		virtual void DrawText(olc::PixelGameEngine *pge)
 		{
 			if (Text.length() > 0)
@@ -296,6 +333,7 @@ namespace RasputinUI
 			}
 		}
 
+		/* AlignTextIn: A convenience function to calculate position within a rectangle given an alignment, size, and scale. */
 		olc::vf2d AlignTextIn(olc::PixelGameEngine* pge, std::string text, Rect destination, FullAlignment textAlign, olc::vf2d scale)
 		{
 			olc::vf2d spos = destination.Position;
@@ -316,6 +354,8 @@ namespace RasputinUI
 		}
 	};
 
+	/* BorderedControl: a derived ControlBase that adds a border definable by color and width. */
+	/* --- needs full detail in class --- */
 	class BorderedControl : public ControlBase
 	{
 	public:
@@ -344,6 +384,8 @@ namespace RasputinUI
 		}
 	};
 
+	/* ListControl: a derived and composite ControlBase that allows listbox like functionality. */
+	/* --- needs full detail in class --- */
 	class ListControl : public BorderedControl
 	{
 	public:
@@ -485,6 +527,8 @@ namespace RasputinUI
 		}
 	};
 	
+	/* UIManager: my implementation of a UI management system, feel free to modify or use your own. */
+	/* --- needs full detail in class --- */
 	class UIManager : public ControlBase
 	{
 	private:
