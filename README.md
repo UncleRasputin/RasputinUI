@@ -62,6 +62,6 @@ Each Style has the following properties:
 
 The control will theme based on its state at render time each frame.
 If you want to use default for any state other than default, you can:
- 1. use Default.Dupe() to make a full copy
+ 1. use Default.DeepCopy() to make a full copy
  2. set .empty of the style to true, which will make it fall back to default
  3. define an entirely new style for this state
