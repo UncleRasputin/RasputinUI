@@ -355,13 +355,20 @@ namespace RasputinUI
 	};
 
 	/* BorderedControl: a derived ControlBase that adds a border definable by color and width. */
-	/* --- needs full detail in class --- */
+	/* Currently, since border isnt a part of a them, BorderedControl only supports two state differences, hovering or normal. */
 	class BorderedControl : public ControlBase
 	{
 	public:
+		/* BorderColor: Default Border Color */
 		olc::Pixel BorderColor = olc::BLANK;
+
+		/* BorderHoverColor: Hover Border Color */
 		olc::Pixel BorderHoverColor = olc::BLANK;
+
+		/* BorderWidth: the width, and height depending on the edge, of the border */
 		int BorderWidth = 2;
+
+		/* Constructor: sets position and parent, as well as bordercolor and width */
 		BorderedControl(Rect location, ControlBase* parent, olc::Pixel borderColor, int borderWidth = 2)
 			: ControlBase(location, parent)
 		{
@@ -369,6 +376,7 @@ namespace RasputinUI
 			BorderWidth = borderWidth;
 		}
 
+		/* DrawCustom: this class overrides only the DrawCustom portion of the Control Render process. */
 		void DrawCustom(olc::PixelGameEngine* pge) override
 		{
 			Rect bnds = { ScreenPos(), {Location.Size.x, Location.Size.y} };
@@ -385,27 +393,37 @@ namespace RasputinUI
 	};
 
 	/* ListControl: a derived and composite ControlBase that allows listbox like functionality. */
-	/* --- needs full detail in class --- */
+	
 	class ListControl : public BorderedControl
 	{
 	public:
+		/* SelectionChanged: A callback function to indicate that the selection of the list has changed */
 		std::function<void(ControlBase*)> SelectionChanged;
+
+		/* ItemTheme: The theme for the items in the list (independant of the theme of the list). */
 		ControlTheme ItemTheme;
+
+		/* EmptyTheme: EmptyTheme is a default theme that is used to draw any region of list that doesnt have an item available to draw */
 		ControlTheme EmptyTheme;
+
+		/* Constructor: Constructor to create and set ItemTheme */
 		ListControl(Rect location, ControlBase* parent, ControlTheme itemTheme)
 			: BorderedControl(location, parent, olc::BLANK, 0) 
 		{ 
 			ItemTheme = itemTheme; 
 		}
 
+		/* Constructor: Constructor to create and set ItemTheme and configure a border. */
 		ListControl(Rect location, ControlBase* parent, ControlTheme itemTheme, olc::Pixel borderColor, int borderWidth = 0)
 			: BorderedControl(location, parent, borderColor, borderWidth) 
 		{ 
 			ItemTheme = itemTheme;
 		}
 
+		/* ItemHeight: the height of each item in the list. */
 		int ItemHeight = 16;
 
+		/* SetItems: resets the items in the list.  It also resets any selection and scrolls to the top of the list. */
 		void SetItems(std::vector<std::string> items)
 		{
 			for (auto control : Controls)
@@ -423,6 +441,7 @@ namespace RasputinUI
 			createListItems();
 		}
 
+		/* GetSelection: returns the text of the selected item or an empty string if there is no selection. */
 		std::string GetSelection()
 		{
 			if (SelectedIndex == -1)
@@ -431,6 +450,7 @@ namespace RasputinUI
 				return Items.at(SelectedIndex);
 		}
 
+		/* SetSelection: attempts to set the selection of the list to the Item that matches the item paramater. */
 		void SetSelection(std::string item)
 		{
 			SelectedIndex = -1;
@@ -445,15 +465,17 @@ namespace RasputinUI
 			setItemText();
 			if (SelectionChanged != NULL)
 				SelectionChanged(this);
-
 		}
+
+		/* Scroll: scroll the list, in a positive or negative amt.  it is clamped at the first and list items in the current list. */
 		void Scroll(int amt)
 		{
 			TopIndex = std::min(std::max(0, TopIndex + amt), ((int)Items.size()) - 1);
 			setItemText();
 		}
 
-		bool CanScroll(bool up /*else down*/)
+		/* CanScroll: are there items in the specificed direction that i cannot see?  parameter is true if UP or false if DOWN */
+		bool CanScroll(bool up)
 		{
 			if (up)
 				return TopIndex >= 0;
@@ -462,6 +484,7 @@ namespace RasputinUI
 		}
 
 	private:
+		/* setItemText: this redraws the text of each control created to match the current position in the list, as well as show the current selection */
 		void setItemText()
 		{
 			for (int i = 0; i < ListItems.size(); i++)
@@ -479,12 +502,20 @@ namespace RasputinUI
 				}
 			}
 		}
+		
+		/* Items: the collection of strings that make up the list. */
 		std::vector<std::string> Items;
+
+		/* TopIndex: the index that is currently the top of the visible items in the list. */
 		int TopIndex = 0; // our scroll position
 
+		/* ListItems: the controls on the screen that display the current selection of Items */
 		std::vector<ControlBase *> ListItems;
+
+		/* createListItems: this recreates all of the controls that are used for the display after the list changes */
 		void createListItems()
 		{
+			// clean up!
 			ListItems.clear();
 			Rect cr = GetClientRect();
 			int toDraw = cr.Size.y / ItemHeight;
@@ -500,7 +531,11 @@ namespace RasputinUI
 			}
 			setItemText(); 
 		}
+
+		/* SelectedIndex: the current index of the selection, IN Items, or -1 if no selection. */
 		int SelectedIndex = -1;
+
+		/* ItemClicked: Callback function to handle item selection */
 		void ItemClicked(ControlBase* control)
 		{
 			// find the index of the string
@@ -518,6 +553,8 @@ namespace RasputinUI
 		}
 
 	protected:
+
+		/* ItemAt: converts screen coordinates to an index into Items */
 		int ItemAt(olc::vi2d location) 
 		{
 			Rect cr = GetClientRect();
@@ -528,23 +565,29 @@ namespace RasputinUI
 	};
 	
 	/* UIManager: my implementation of a UI management system, feel free to modify or use your own. */
-	/* --- needs full detail in class --- */
 	class UIManager : public ControlBase
 	{
 	private:
+		/* PGE: handle to the PixelGameEngine that this UI is running on. */
 		olc::PixelGameEngine *PGE;
+
+		/* curControl: the control, if any, the mouse is currently over */
 		ControlBase* curControl = NULL;
+
+		/* m_controls: a list of all of the controls that UIManager has been asked to manage, and clean up */
 		std::vector<ControlBase *> m_controls;
 	public:
 
+		/* Constructor: it nees an engine! */
 		UIManager(olc::PixelGameEngine *pge)
 		{
 			Location.Size = { pge->ScreenWidth(),pge->ScreenHeight() };
 			PGE = pge;
 		}
 
+		/* Descructor: clean up (or try) all of the controls you were managing. */
 		~UIManager()
-		{  // if we have a control in our control list, lets make sure its deleted
+		{  /
 			for (auto control : Controls)
 			{
 				try
@@ -555,6 +598,7 @@ namespace RasputinUI
 			}
 		}
 
+		/* UpdateUI: the main update loop for the ui, to be called by OnUserUpdate in the game loop. */
 		void UpdateUI(float fElapsedTime)
 		{
 			olc::vi2d mpos = PGE->GetMousePos();
@@ -571,6 +615,7 @@ namespace RasputinUI
 			}
 		}
 
+		/* CreateControl: use this to create a default control and add it to the parent at the specified location. */
 		ControlBase *CreateControl(Rect location, ControlBase* parent = NULL)
 		{
 			ControlBase* result = new ControlBase(location, parent);
@@ -578,6 +623,7 @@ namespace RasputinUI
 			return result;
 		}
 
+		/* CreateControl: use this to create a themed control and add it to the parent at the specified location. */
 		ControlBase *CreateControl(Rect location, ControlTheme theme, ControlBase* parent = NULL)
 		{
 			ControlBase* result = CreateControl(location, parent);
@@ -586,6 +632,7 @@ namespace RasputinUI
 			return result;
 		}
 
+		/* AddControl: Add a custom control, or precreated control, that derives from ControlBase. */
 		void AddControl(ControlBase* control)
 		{
 			m_controls.push_back(control);
