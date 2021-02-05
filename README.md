@@ -3,6 +3,18 @@ A basic UI implementation for olcPixelGameEngine.
 
 Requires olcPixelGameEngine.h  (https://github.com/OneLoneCoder/olcPixelGameEngine)
 
+--------------------------------------------------
+
+Totally free UI from Rasputin (aka UncleTime)
+
+License Type: Relief
+
+Please take this code and do not return it, it's site offends me and torments my soul.
+You may do whatever you want with it, including remove this comment if you feel the need to.
+If you make changes or derive from it to add functionality, consider sharing it as well.
+
+--------------------------------------------------
+
 *** UNDER CONSTRUCTION ***
 
 You only need RasputinUI.h.
