@@ -118,6 +118,7 @@ public:
 		for (int i = 0; i < 3; i++)
 		{
 			RasputinUI::ControlBase* textbar = new RasputinUI::ControlBase({ {10,100 + (i * 30)}, {580,30} }, TextBarTheme, UIWindow);
+			uiManager->AddControl(textbar);
 			textbar->Text = "This is TextBar" + std::to_string(i + 1) + "!";
 			textbar->Theme.Default.TextAlign.Horizontal = textbar->Theme.Hover.TextAlign.Horizontal = (RasputinUI::Alignment)i;
 		}
@@ -125,13 +126,25 @@ public:
 		for (int i = 0; i < 4; i++)
 		{
 			RasputinUI::ControlBase* button = uiManager->CreateControl({ { 80 + (110 * i), 400 }, {100,30} }, ButtonTheme, UIWindow);
+			uiManager->AddControl(button);
 			button->Text = std::to_string(i + 1);
 			button->OnClick = std::bind(&Example::OnClick, this, std::placeholders::_1, std::placeholders::_2);
 			if (i == 2)
 				button->Enabled = false;
 		}
 
+		/*
 		RasputinUI::Flasher *flasher = new RasputinUI::Flasher({ { 300,250 },{4,50} }, UIWindow);
+		uiManager->AddControl(flasher);
+		*/
+
+		RasputinUI::TextEdit* textedit = new RasputinUI::TextEdit({ {300,320},{200,25} }, UIWindow, olc::BLACK, 2);
+		textedit->Theme.Default.BackgroundColor = olc::WHITE;
+		textedit->Theme.Default.ForegroundColor = olc::BLACK;
+		textedit->Theme.Default.Padding = { 4,8,4,8 };
+		textedit->Theme.Default.TextAlign = { RasputinUI::Alignment::Near, RasputinUI::Alignment::Center };
+		textedit->Text = "test";
+		uiManager->AddControl(textedit);
 	}
 
 	void OnClick(RasputinUI::ControlBase* sender, int mbutton)
