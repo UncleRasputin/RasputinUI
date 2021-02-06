@@ -16,39 +16,35 @@ private:
 	}
 	void CreateThemes()
 	{
-		ButtonTheme.Default.BackgroundColor = olc::BLANK;
-		ButtonTheme.Default.BackgroundDecal = decButton;
+		ButtonTheme.Default.Background = new RasputinUI::DecalBackground(decButton);
 		ButtonTheme.Default.ForegroundColor = olc::GREEN;
 		ButtonTheme.Default.TextScale = { 1,1 };
 
 		ButtonTheme.Hover = ButtonTheme.Default.DeepCopy();
-		ButtonTheme.Hover.BackgroundColor = olc::BLANK;
-		ButtonTheme.Hover.BackgroundDecal = decButtonHover;
+		ButtonTheme.Hover.Background = new RasputinUI::DecalBackground(decButtonHover);
 		ButtonTheme.Hover.ForegroundColor = olc::BLACK;
 
 		ButtonTheme.Disabled = ButtonTheme.Default.DeepCopy();
-		ButtonTheme.Disabled.BackgroundColor = olc::BLANK;
-		ButtonTheme.Disabled.BackgroundDecal = decButtonDisabled;
+		ButtonTheme.Disabled.Background = new RasputinUI::DecalBackground(decButtonDisabled);
 		ButtonTheme.Disabled.ForegroundColor = olc::VERY_DARK_GREY;
 
-
-		TextBarTheme.Default.BackgroundColor = olc::DARK_GREY;
+		
+		TextBarTheme.Default.Background = new RasputinUI::SolidBackground(olc::DARK_GREY);
 		TextBarTheme.Default.Padding = { 4,4,4,4 };
 		TextBarTheme.Default.ForegroundColor = olc::WHITE;
 
 		TextBarTheme.Hover = TextBarTheme.Default.DeepCopy();
-		TextBarTheme.Hover.BackgroundColor = olc::GREY;
+		TextBarTheme.Hover.Background = new RasputinUI::SolidBackground(olc::GREY);
 
-		ListItemTheme.Default.BackgroundColor = olc::Pixel(0, 0, 0, 20);;
+		ListItemTheme.Default.Background = new RasputinUI::SolidBackground(olc::Pixel(0, 0, 0, 20));
 		ListItemTheme.Default.Padding = { 4,4,4,4 };
 		ListItemTheme.Default.ForegroundColor = olc::WHITE;
 
 		ListItemTheme.Hover = ListItemTheme.Default.DeepCopy();
-		ListItemTheme.Hover.BackgroundColor = olc::Pixel(0, 0, 0, 50);
+		ListItemTheme.Hover.Background = new RasputinUI::SolidBackground(olc::Pixel(0, 0, 0, 50));
 
 		ListItemTheme.Active = ListItemTheme.Default.DeepCopy();
-		ListItemTheme.Active.BackgroundColor = olc::RED;
-
+		ListItemTheme.Active.Background = new RasputinUI::SolidBackground(olc::RED);
 	}
 public:
 	Example()
@@ -86,13 +82,15 @@ public:
 	{
 		UIWindow = new RasputinUI::BorderedControl({ {20,10},{600,450} }, uiManager, olc::Pixel(151, 115, 106), 3);
 		uiManager->AddControl(UIWindow);
-		UIWindow->Theme.Default.BackgroundColor = olc::Pixel(51, 115, 106);
+		//UIWindow->Theme.Default.BackgroundColor = olc::Pixel(51, 115, 106);
+		UIWindow->Theme.Default.Background = new RasputinUI::SolidBackground(olc::Pixel(51, 115, 106));
 		UIWindow->Theme.Default.ForegroundColor = olc::WHITE;
 		UIWindow->Theme.Default.Padding = { 4,4,4,4 };
 		UIWindow->Theme.Default.TextAlign = { RasputinUI::Far, RasputinUI::Far };
 
 		Heading = uiManager->CreateControl({ {10,10}, {580,80} }, UIWindow);
-		Heading->Theme.Default.BackgroundColor = olc::BLANK;
+		Heading->Theme.Default.Background= RasputinUI::SolidBackground::BLANK;
+		//Heading->Theme.Default.BackgroundColor = olc::BLANK;
 		Heading->Theme.Default.ForegroundColor = olc::RED;
 		Heading->Theme.Default.TextAlign = { RasputinUI::Center,RasputinUI::Center };
 		Heading->Text = "Sample Heading!";
@@ -103,7 +101,8 @@ public:
 		ListBox1->BorderWidth = 3;
 		ListBox1->Theme.Default.Padding = { 5,5,5,5 };
 		
-		ListBox1->Theme.Default.BackgroundColor = olc::Pixel(0,0,0,20);
+		//ListBox1->Theme.Default.BackgroundColor = olc::Pixel(0,0,0,20);
+		ListBox1->Theme.Default.Background = new RasputinUI::SolidBackground(olc::Pixel(0, 0, 0, 20));
 		ListBox1->ItemHeight = 20;
 		uiManager->AddControl(ListBox1);
 		std::vector<std::string> items;
@@ -114,6 +113,7 @@ public:
 		ListBox1->SetItems(items);
 
 		ListBox1->SetSelection("item 3");
+		ListBox1->SelectionChanged = std::bind(&Example::OnSelectionChanged, this, std::placeholders::_1 );
 		
 		for (int i = 0; i < 3; i++)
 		{
@@ -139,14 +139,25 @@ public:
 		*/
 
 		RasputinUI::TextEdit* textedit = new RasputinUI::TextEdit({ {300,320},{200,25} }, UIWindow, olc::BLACK, 2);
-		textedit->Theme.Default.BackgroundColor = olc::WHITE;
+		//textedit->Theme.Default.BackgroundColor = olc::WHITE;
+		textedit->Theme.Default.Background = new RasputinUI::SolidBackground(olc::WHITE);
 		textedit->Theme.Default.ForegroundColor = olc::BLACK;
 		textedit->Theme.Default.Padding = { 4,8,4,8 };
 		textedit->Theme.Default.TextAlign = { RasputinUI::Alignment::Near, RasputinUI::Alignment::Center };
 		textedit->Text = "test";
+		textedit->OnTextChanged = std::bind(&Example::OnTextChanged, this, std::placeholders::_1, std::placeholders::_2);
 		uiManager->AddControl(textedit);
 	}
 
+	void OnSelectionChanged(RasputinUI::ListControl* list)
+	{
+		Heading->Text = list->GetSelection();
+	}
+
+	void OnTextChanged(RasputinUI::ControlBase* sender, std::string val)
+	{
+		Heading->Text = val;
+	}
 	void OnClick(RasputinUI::ControlBase* sender, int mbutton)
 	{
 		if (sender->Text.compare("1") == 0)
