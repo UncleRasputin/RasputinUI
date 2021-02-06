@@ -81,18 +81,82 @@ namespace RasputinUI
 		Alignment Vertical;
 	};
 
+
+	class UIBackground
+	{
+	public:
+		void virtual Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) = 0;
+	};
+
+	class SolidBackground : public UIBackground
+	{
+	private:
+		SolidBackground() {}
+	public:
+		static SolidBackground* BLANK;
+		olc::Pixel Color = olc::BLANK;
+		SolidBackground(olc::Pixel clr)
+		{
+			Color = clr;
+		}
+		void Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) override
+		{
+			pge->FillRectDecal(area.Position, area.Size, Color);
+		}
+	};
+	SolidBackground* SolidBackground::BLANK = new SolidBackground(olc::BLANK);
+
+	class DecalBackground : public UIBackground
+	{
+	private:
+		DecalBackground();
+	public:
+		olc::Decal* oDecal;
+		FullAlignment ImageAlignment;
+		olc::vf2d ImageScale;
+		olc::Pixel Tint = olc::WHITE; // so you can tint the decal, default to normal tint
+
+		DecalBackground(olc::Decal* decal, FullAlignment alignment = { RasputinUI::Alignment::Center,RasputinUI::Alignment::Center }, olc::vf2d scale = { 1,1 })
+		{
+			oDecal = decal;
+			ImageAlignment = alignment;
+			ImageScale = scale;
+		}
+
+		void Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) override
+		{
+			olc::vf2d spos = area.Position;
+			olc::vi2d dsize = { oDecal->sprite->width, oDecal->sprite->height };
+			dsize *= ImageScale;
+			if (ImageAlignment.Horizontal == Far)
+				spos.x = area.right() - dsize.x;
+			else if (ImageAlignment.Horizontal == Center)
+				spos.x += (area.Size.x - dsize.x) / 2;
+
+			if (ImageAlignment.Vertical == Far)
+				spos.y = area.bottom() - dsize.y;
+			else if (ImageAlignment.Vertical == Center)
+				spos.y += (area.Size.y - dsize.y) / 2;
+
+			pge->DrawDecal(spos, oDecal, ImageScale, Tint);
+		}
+	};
+
 	/* ControlStyle: determines the appearance of a control */
 	struct ControlStyle
 	{
 		bool empty = false; // set this to true to make it be ignored
 		olc::Pixel ForegroundColor = olc::BLANK;
-		olc::Pixel BackgroundColor = olc::BLANK;
 		FullAlignment TextAlign = { Center,Center };
 		olc::vf2d TextScale = { 1,1 };
 		Spacing Padding = { 0,0,0,0 };
+
+		UIBackground* Background = NULL;//SolidBackground::BLANK; // default background to blank
+		/*olc::Pixel BackgroundColor = olc::BLANK;
 		olc::Decal* BackgroundDecal = NULL;
 		FullAlignment BackgroundDecalAlign = { Center,Center };
-		olc::vf2d BackgroundDecalScale = { 1,1 };
+		olc::vf2d BackgroundDecalScale = { 1,1 };*/
+
 		static ControlStyle Empty()
 		{
 			ControlStyle result;
@@ -105,13 +169,15 @@ namespace RasputinUI
 			ControlStyle result;
 			result.empty = empty;
 			result.ForegroundColor = ForegroundColor;
-			result.BackgroundColor = BackgroundColor;
 			result.TextAlign = TextAlign;
 			result.TextScale = TextScale;
 			result.Padding = Padding;
+			result.Background = Background;
+/*			result.BackgroundColor = BackgroundColor;
 			result.BackgroundDecal = BackgroundDecal;
 			result.BackgroundDecalAlign = BackgroundDecalAlign;
-			result.BackgroundDecalScale = BackgroundDecalScale;
+			result.BackgroundDecalScale = BackgroundDecalScale;*/
+
 			return result;
 		}
 	};
@@ -252,6 +318,19 @@ namespace RasputinUI
 
 		/* HandleFocusInput: Called during game update if you have input focus, so you can check for any keyboard atcivity */
 		virtual void HandleFocusInput(olc::PixelGameEngine* pge, float fElapsedTime) { }
+
+		/* Destructor: In case noone cleaned up the children before destroying the control */
+		~ControlBase()
+		{
+			for (auto control : Controls)
+			{
+				try
+				{
+					delete control;
+				}
+				catch (...) {} // may not be our memory to clean, but dont want to leave it hanging if we are disappearing
+			}
+		}
 	protected:
 		/* ScreenPos: Our location in screen space */
 		olc::vi2d ScreenPos()
@@ -301,6 +380,16 @@ namespace RasputinUI
 		virtual void DrawBackground(olc::PixelGameEngine *pge, float fElapsedTime)
 		{
 			ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
+
+			if (cs.Background)
+			{
+				cs.Background->Render(pge, { ScreenPos(), Location.Size }, fElapsedTime);
+			}
+			else
+			{
+				int a = 0; // why is background null?
+			}
+			/*
 			pge->FillRectDecal(ScreenPos(), Location.Size, cs.BackgroundColor);
 
 			if (cs.BackgroundDecal)
@@ -324,6 +413,7 @@ namespace RasputinUI
 				pge->DrawDecal(spos, cs.BackgroundDecal, cs.BackgroundDecalScale);
 
 			}
+			*/
 		}
 
 		/* DrawCustom: A layer to draw anything needed for custom controls, sits between the foreground and background. */
@@ -335,10 +425,6 @@ namespace RasputinUI
 			if (Text.length() > 0)
 			{
 				ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
-				if (Hovering)
-				{
-					int a = 0;
-				}
 				olc::vf2d spos = AlignTextIn(pge, Text, GetClientRect(), cs.TextAlign, cs.TextScale);
 				pge->DrawStringDecal(spos, Text, cs.ForegroundColor, cs.TextScale);
 			}
@@ -409,7 +495,7 @@ namespace RasputinUI
 	{
 	public:
 		/* SelectionChanged: A callback function to indicate that the selection of the list has changed */
-		std::function<void(ControlBase*)> SelectionChanged;
+		std::function<void(ListControl*)> SelectionChanged;
 
 		/* ItemTheme: The theme for the items in the list (independant of the theme of the list). */
 		ControlTheme ItemTheme;
@@ -679,56 +765,8 @@ namespace RasputinUI
 		}
 
 	};
-
-	/* Flasher : a custom control that just pulses based on the update clock.  It alpha blends the background channel over time with the clock.*/
-	/* Mostly intended for composite and custom controls, for a cursor indicator for example*/
-	class Flasher : public ControlBase
-	{
-	private:
-		/* Alpha: Current alpha value for the flasher */
-		int Alpha = 0;
-
-		/* Factor: Current direction the alpha channel is moving */
-		int Factor = 1;
-
-	public:
-		/* Constructor: normal ControlBase, location and parent */
-		Flasher(Rect location, ControlBase* parent = NULL)
-			: ControlBase(location, parent)
-		{
-			Theme.Default.ForegroundColor = olc::WHITE;
-			Theme.Default.BackgroundColor = olc::GREY;
-			Location = location;
-			Parent = parent;
-			if (Parent != NULL)
-			{
-				Parent->Controls.push_back(this);
-			}
-		}
-		
-		/* Pace: The speed at which the pulse occurs.  Pace * fElapsedTime is added or subtracted from the alpha of the background until it reaches the limit, then changes direction */
-		int Pace = 300;
-
-		/* DrawBackground: override the parent function so that we can make it pulse */
-		void DrawBackground(olc::PixelGameEngine *engine, float fElapsedTime) override 
-		{
-			int amt = (int)(Pace * fElapsedTime);
-			int a = Alpha + (amt * Factor);
-			if (a > 255)
-			{
-				a = 255;
-				Factor *= -1;
-			}
-			else if (a < 0)
-			{
-				a = 0;
-				Factor *= -1;
-			}
-			Alpha = a;
-			engine->FillRectDecal(ScreenPos(), Location.Size, olc::Pixel( Theme.Default.BackgroundColor.r, Theme.Default.BackgroundColor.g, Theme.Default.BackgroundColor.b, Alpha) );
-		}
-	};
-
+	
+	/* TextEdit : a simplified text entry field.  Check keyList for list of supported keys. */
 	class TextEdit : public BorderedControl
 	{
 	private:
@@ -766,6 +804,7 @@ namespace RasputinUI
 		/* CursorColor: the color of the text entry cursor */
 		olc::Pixel CursorColor = olc::BLACK;
 	public:
+		std::function<void(ControlBase*, std::string)> OnTextChanged;
 		/* Constructor: Basic default constructor */
 		TextEdit(Rect location, ControlBase* parent) : BorderedControl(location, parent, olc::BLANK, 0) 
 		{ 
@@ -802,7 +841,10 @@ namespace RasputinUI
 			}
 			else
 			{
-				appendInput(pge);
+				bool changed = appendInput(pge);
+				if (changed && OnTextChanged != NULL)
+					OnTextChanged(this, Text);
+
 				if (Text.length() == 0)
 				{
 					pge->FillRectDecal({ (float)pos.Position.x + 3, (float)pos.Position.y + 2 }, { (float)2,(float)pos.Size.y -4}, olc::Pixel(CursorColor.r, CursorColor.g, CursorColor.b, Alpha));
@@ -831,9 +873,10 @@ namespace RasputinUI
 			}
 		}
 
-		/* appendInput: check for any keys and append them to Text if there are any pressed that we care about */
-		void appendInput(olc::PixelGameEngine *pge)
+		/* appendInput: check for any keys and append them to Text if there are any pressed that we care about, returns a bool indicating if any input caused Text to change */
+		bool appendInput(olc::PixelGameEngine *pge)
 		{
+			bool changed = false;
 			bool shifted = pge->GetKey(olc::SHIFT).bPressed || pge->GetKey(olc::SHIFT).bHeld;
 			for (int i = 0; i < 41; i++)
 			{
@@ -842,10 +885,14 @@ namespace RasputinUI
 					if (keyValues[i] == 0x08)
 					{
 						if (Text.length() > 0)
+						{
 							Text = Text.substr(0, Text.length() - 1);
+							changed = true;
+						}
 					}
 					else
 					{
+						changed = true;
 						if (shifted)
 							Text += keyValues[i];
 						else
@@ -853,6 +900,7 @@ namespace RasputinUI
 					}
 				}
 			}
+			return changed;
 		}
 		
 		/* adjustFlasher: updates the pulse of the cursor */
