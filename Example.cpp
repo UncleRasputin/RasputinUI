@@ -130,6 +130,8 @@ public:
 			if (i == 2)
 				button->Enabled = false;
 		}
+
+		RasputinUI::Flasher *flasher = new RasputinUI::Flasher({ { 300,250 },{4,50} }, UIWindow);
 	}
 
 	void OnClick(RasputinUI::ControlBase* sender, int mbutton)
