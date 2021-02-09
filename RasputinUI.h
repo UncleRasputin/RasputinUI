@@ -18,6 +18,7 @@ namespace RasputinUI
 {
 	// Forward declares to handle dependencies
 	class ControlBase;
+	class UIManager;
 
 	/* Class: EventHandler   Handles subscription and dispatch of events that take only the initiating control as a parameter */
 	class EventHandler
@@ -646,6 +647,7 @@ namespace RasputinUI
 
 		/* Render: How we draw!  This can be completely overridden, and each piece can be as well,
 		   DrawBackground, DrawCustom, and DrawText are called, in that order, and are all virtual and can be overridden */
+		friend class UIManager;
 		virtual void Render(olc::PixelGameEngine* pge, float fElapsedTime)
 		{
 			if (Visible)
@@ -1016,12 +1018,15 @@ namespace RasputinUI
 	};
 
 	/* UIManager: my implementation of a UI management system, feel free to modify or use your own. */
-	class UIManager : public ControlBase
+	class UIManager : public olc::PGEX
 	{
+	public:
+		UIManager()
+			: olc::PGEX(true)
+		{
+			mainControl = new ControlBase({ {0,0}, {olc::PGEX::pge->ScreenWidth(),olc::PGEX::pge->ScreenHeight()} });
+		}
 	private:
-		/* PGE: handle to the PixelGameEngine that this UI is running on. */
-		olc::PixelGameEngine *PGE;
-
 		/* curControl: the control, if any, the mouse is currently over */
 		ControlBase* curControl = NULL;
 
@@ -1031,20 +1036,16 @@ namespace RasputinUI
 		/* focusControl: The control that currently has input focus. */
 		ControlBase* focusControl = NULL;
 	public:
+		/* the control for the UI manager*/
+		ControlBase *mainControl;
+
 		/* FocusControl: The control that currently has input focus. */
 		ControlBase *FocusControl() { return focusControl; }
-
-		/* Constructor: it nees an engine! */
-		UIManager(olc::PixelGameEngine *pge)
-		{
-			Location.Size = { pge->ScreenWidth(),pge->ScreenHeight() };
-			PGE = pge;
-		}
 
 		/* Descructor: clean up (or try) all of the controls you were managing. */
 		~UIManager()
 		{
-			for (auto control : Controls)
+			for (auto control : mainControl->Controls)
 			{
 				try
 				{
@@ -1061,9 +1062,9 @@ namespace RasputinUI
 		ControlBase *mDownControl = NULL; 
 
 		/* UpdateUI: the main update loop for the ui, to be called by OnUserUpdate in the game loop. */
-		void UpdateUI(float fElapsedTime)
+		void OnBeforeUserUpdate(float &fElapsedTime) override
 		{
-			olc::vi2d mpos = PGE->GetMousePos();
+			olc::vi2d mpos = olc::PGEX::pge->GetMousePos();
 			
 			if (mpos != lastmouse)
 			{
@@ -1080,7 +1081,7 @@ namespace RasputinUI
 
 			ControlBase *nControl = NULL;
 
-			nControl = MouseOver(mpos);
+			nControl = mainControl->MouseOver(mpos);
 			if (nControl != curControl)
 			{
 				if (curControl != NULL)
@@ -1095,14 +1096,14 @@ namespace RasputinUI
 
 			if (focusControl != NULL)
 			{
-				focusControl->HandleFocusInput(PGE, fElapsedTime);
+				focusControl->HandleFocusInput(olc::PGEX::pge, fElapsedTime);
 			}
 
-			Render(PGE, fElapsedTime);
+			mainControl->Render(olc::PGEX::pge, fElapsedTime);
 
 			for (int i = 0; i < 3; i++)
 			{
-				if (PGE->GetMouse(i).bPressed)
+				if (olc::PGEX::pge->GetMouse(i).bPressed)
 				{
 					if (curControl != NULL)
 					{
@@ -1130,7 +1131,7 @@ namespace RasputinUI
 					}
 
 				}
-				else if (PGE->GetMouse(i).bReleased)
+				else if (olc::PGEX::pge->GetMouse(i).bReleased)
 				{
 					if (mDownControl != NULL)
 						mDownControl->MouseUp(i);
