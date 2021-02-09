@@ -141,14 +141,14 @@ public:
 	
 	bool OnUserCreate() override
 	{
-		uiManager = new RasputinUI::UIManager(this);
+		uiManager = new RasputinUI::UIManager();
 		olc::Pixel gridcolor = olc::RED;
 		gridcolor.a = 40;
-		uiManager->Theme.Default.Background = new GridBackground(olc::BLACK, gridcolor, { 20,20 });
+		uiManager->mainControl->Theme.Default.Background = new GridBackground(olc::BLACK, gridcolor, { 20,20 });
 		
-		Win3Window* win1 = new Win3Window({ {10,10},{300,200} }, uiManager, this);
+		Win3Window* win1 = new Win3Window({ {10,10},{300,200} }, uiManager->mainControl, this);
 		win1->Theme.Default.Background = new SolidBackground(olc::RED);
-		Win3Window* win2 = new Win3Window({ {320,10},{300,200} }, uiManager, this);
+		Win3Window* win2 = new Win3Window({ {320,10},{300,200} }, uiManager->mainControl, this);
 
 		Clear(olc::BLACK);
 		return true;
@@ -156,7 +156,6 @@ public:
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		uiManager->UpdateUI(fElapsedTime);
 		return true;
 	}
 };
