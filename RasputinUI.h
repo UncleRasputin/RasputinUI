@@ -77,12 +77,17 @@ namespace RasputinUI
 
 		bool Contains(olc::vi2d point)
 		{
-			return (point.x >= Position.x && point.x < (Position.x + Size.x) && point.y >= Position.y && point.y < (Position.y + Size.y));
+			return (point.x >= Position.x && point.x <= (Position.x + Size.x) && point.y >= Position.y && point.y <= (Position.y + Size.y));
 		}
 
 		bool ContainsRect(Rect otherRect)
 		{
 			return Contains(otherRect.Position) && Contains({ otherRect.right(),otherRect.Position.y }) && Contains({ otherRect.Position.x,otherRect.bottom() }) && Contains({ otherRect.right(),otherRect.bottom() });
+		}
+
+		bool Intersects(Rect otherRect)
+		{
+			return Contains(otherRect.Position) || Contains({ otherRect.right(),otherRect.Position.y }) || Contains({ otherRect.Position.x,otherRect.bottom() }) || Contains({ otherRect.right(),otherRect.bottom() });
 		}
 
 		int32_t right()
@@ -105,6 +110,10 @@ namespace RasputinUI
 			Position = { 0,0 };
 			Size = { 0,0 };
 		}
+		bool IsEmpty()
+		{
+			return Size.x + Size.y == 0;
+		}
 	};
 
 	/* Spacing: a structure to define space around an object, like margins or padding.  4 values: top,right,bottom,left (starts at top and continues clockwise)*/
@@ -119,8 +128,7 @@ namespace RasputinUI
 		int horiz() { return left + right; }
 	};
 
-
-	class Enums
+	class RUI
 	{
 	public:
 		/* BorderType: indicates what type of border to draw */
@@ -128,13 +136,16 @@ namespace RasputinUI
 
 		/* Alignment: a basic Near/Center/Far alignment system */
 		enum Alignment { Near, Far, Center };
+
+		/*Orientation: used for control orientation, sliders, layout tools, etc*/
+		enum Orientation { Horizontal, Vertical };
 	};
 
 	/* FullAlignment: a structure containing both Horizontal and Vertical alignment */
 	struct FullAlignment
 	{
-		Enums::Alignment Horizontal;
-		Enums::Alignment Vertical;
+		RUI::Alignment Horizontal;
+		RUI::Alignment Vertical;
 	};
 
 	/* UIBackground: an abstraction for the background of a control */
@@ -152,7 +163,7 @@ namespace RasputinUI
 		/* ForegroundColor: the color of text on the control */
 		olc::Pixel ForegroundColor = olc::BLANK;
 		/* TextAlign: the horizontal and vertical alignment for text on the control */
-		FullAlignment TextAlign = { Enums::Alignment::Center, Enums::Alignment::Center };
+		FullAlignment TextAlign = { RUI::Alignment::Center, RUI::Alignment::Center };
 
 		/* TextScale: the scaling value for the text of the control */
 		olc::vf2d TextScale = { 1,1 };
@@ -164,7 +175,7 @@ namespace RasputinUI
 		UIBackground* Background = NULL;
 
 		/* BorderType: The type of border on this control */
-		Enums::BorderType BorderType= Enums::BorderType::None;
+		RUI::BorderType BorderType = RUI::BorderType::None;
 
 		/* Empty: a quick way to get an empty style */
 		static ControlStyle Empty()
@@ -223,38 +234,61 @@ namespace RasputinUI
 	/* Class: UI   Just a place for common static functions */
 	class UI
 	{
-		public:
+	public:
+		static float fBlendFactor; // for alpha function
+		static olc::Pixel TrueAlpha(int32_t x, int32_t y, const olc::Pixel& p, const olc::Pixel& d)
+		{
+#ifdef RASPUTINUI_NO_ALPHA   // in case you dont want to use modified alpha blend
+			float a = (float)(p.a / 255.0f) * fBlendFactor;
+			float c = 1.0f - a;
+			float r = a * (float)p.r + c * (float)d.r;
+			float g = a * (float)p.g + c * (float)d.g;
+			float b = a * (float)p.b + c * (float)d.b;
+
+			return olc::Pixel((uint8_t)r, (uint8_t)g, (uint8_t)b); // the original alpha combine
+#else
+			if (d.a ==0 && p.a == 0)
+				return true; // short circuit, both 0 alpha
+			float a = (float)(p.a / 255.0f) * fBlendFactor;
+			float c = 1.0f - a;
+			float r = a * (float)p.r + c * (float)d.r;
+			float g = a * (float)p.g + c * (float)d.g;
+			float b = a * (float)p.b + c * (float)d.b;
+
+			uint8_t ra = 255; // what it was defaulting to regardless of incoming alpha, below is the "fix"
+			if (d.a == 0)
+				ra = p.a;
+			else if (p.a == 0)
+				ra = d.a;
+			return olc::Pixel((uint8_t)r, (uint8_t)g, (uint8_t)b, ra); // and set the alpha component
+#endif
+		}
+
 		/* OutputText: this handles text overrun of control boundries */
 		static void OutputText(olc::PixelGameEngine* pge, olc::vi2d location, olc::vi2d size, std::string text, ControlStyle style)
 		{
-			olc::vi2d tSize = pge->GetTextSize(text);
-			if (tSize.x <= size.x && tSize.y <= size.y)
-			{
-				pge->DrawStringDecal(location, text, style.ForegroundColor, style.TextScale);
-				return;
-			}
-			olc::vi2d charSize = pge->GetTextSize("W"); // traditionally a wider character, just for a sample
-			int chars_to_remove = ((tSize.x - size.x) / charSize.x) + 1;
-			pge->DrawStringDecal(location, text.substr(0, text.length() - chars_to_remove), style.ForegroundColor, style.TextScale);
+			pge->DrawString(location, text, style.ForegroundColor, style.TextScale.x);
 		}
 
 		/* Draw Bevel: draw the specified bevel around the control */
-		static void DrawBevel(olc::PixelGameEngine *pge, Enums::BorderType borderType, Rect area)
+		static void DrawBevel(olc::PixelGameEngine* pge, RUI::BorderType borderType, Rect area)
 		{
-			if (borderType == Enums::BorderType::None)
+			if (borderType == RUI::BorderType::None)
 				return;
-			olc::Pixel Highlight1 = olc::Pixel(255, 255, 255, 160);
-			olc::Pixel Highlight2 = olc::Pixel(255, 255, 255, 80);
-			olc::Pixel Shadow1 = olc::Pixel(0, 0, 0, 160);
-			olc::Pixel Shadow2 = olc::Pixel(0, 0, 0, 80);
+			olc::Pixel Highlight1 = olc::Pixel(255, 255, 255);
+			olc::Pixel Highlight2 = olc::Pixel(227, 227, 227);
+			olc::Pixel Shadow1 = olc::Pixel(105,105,105);
+			olc::Pixel Shadow2 = olc::Pixel(160,160,160);
 
 			olc::Pixel t1 = Highlight1;
+			olc::vi2d spos = area.Position;
+
 			switch (borderType)
 			{
-			case Enums::BorderType::Sunken:
+			case RUI::BorderType::Sunken:
 				// default, already set
 				break;
-			case Enums::BorderType::Raised:
+			case RUI::BorderType::Raised:
 				// swap the colors
 				Highlight1 = Shadow1;
 				Shadow1 = t1;
@@ -262,24 +296,27 @@ namespace RasputinUI
 				Highlight2 = Shadow2;
 				Shadow2 = t1;
 				break;
-			case Enums::BorderType::Solid:
-				Highlight2 = Shadow2 = Shadow1;
-				Highlight1 = Shadow1 = olc::BLANK; // so we only draw the single, outer border
+			case RUI::BorderType::Solid:
+			{
+				// special case, easier to draw a rect
+				pge->DrawRect(spos, area.Size, Shadow1);
+				return;
 				break;
 			}
-			olc::vf2d spos = area.Position;
+			}
+			
 
-			pge->FillRectDecal({ spos.x + 1,spos.y + 1 }, { (float)area.Size.x - 2,1 }, Shadow1);
-			pge->FillRectDecal(spos, { (float)area.Size.x,1 }, Shadow2);
+			pge->FillRect({ spos.x + 1,spos.y + 1 }, { area.Size.x - 2,1 }, Shadow1);
+			pge->FillRect(spos, { area.Size.x,1 }, Shadow2);
 
-			pge->FillRectDecal({ spos.x + 1, (float)spos.y + (area.Size.y - 1) }, { (float)area.Size.x - 2,1 }, Highlight1);
-			pge->FillRectDecal({ spos.x + 2, (float)spos.y + (area.Size.y - 2) }, { (float)area.Size.x - 4,1 }, Highlight2);
+			pge->FillRect({ spos.x + 1, spos.y + (area.Size.y - 1) }, { area.Size.x - 2,1 }, Highlight1);
+			pge->FillRect({ spos.x + 2, spos.y + (area.Size.y - 2) }, { area.Size.x - 4,1 }, Highlight2);
 
-			pge->FillRectDecal({ (float)spos.x + (area.Size.x - 2), spos.y + 2 }, { 1,(float)area.Size.y - 3 }, Highlight2);
-			pge->FillRectDecal({ (float)spos.x + (area.Size.x - 1), spos.y + 1 }, { 1,(float)area.Size.y - 1 }, Highlight1);
+			pge->FillRect({ spos.x + (area.Size.x - 2), spos.y + 2 }, { 1,area.Size.y - 3 }, Highlight2);
+			pge->FillRect({ spos.x + (area.Size.x - 1), spos.y + 1 }, { 1,area.Size.y - 1 }, Highlight1);
 
-			pge->FillRectDecal({ spos.x, spos.y + 1 }, { 1,(float)area.Size.y - 1 }, Shadow2);
-			pge->FillRectDecal({ spos.x + 1, spos.y + 2 }, { 1,(float)area.Size.y - 3 }, Shadow1);
+			pge->FillRect({ spos.x, spos.y + 1 }, { 1,area.Size.y - 1 }, Shadow2);
+			pge->FillRect({ spos.x + 1, spos.y + 2 }, { 1,area.Size.y - 3 }, Shadow1);
 		}
 
 		/* AlignTextIn: A convenience function to calculate position within a rectangle given an alignment, size, and scale. */
@@ -290,20 +327,21 @@ namespace RasputinUI
 			olc::vi2d tsize = pge->GetTextSize(text);
 			tsize = { (int)(tsize.x * scale.x),(int)(tsize.y * scale.y) };
 
-			if (textAlign.Horizontal == Enums::Alignment::Far)
-				spos.x += destination.Size.x - tsize.x;
-			else if (textAlign.Horizontal == Enums::Alignment::Center)
-				spos.x += (destination.Size.x - tsize.x) / 2;
+			if (textAlign.Horizontal == RUI::Alignment::Far)
+				spos.x = destination.right() - tsize.x;
+			else if (textAlign.Horizontal == RUI::Alignment::Center)
+				spos.x = destination.Position.x + ((destination.Size.x - tsize.x) / 2);
 
-			if (textAlign.Vertical == Enums::Alignment::Far)
+			if (textAlign.Vertical == RUI::Alignment::Far)
 				spos.y = (float)(destination.bottom() - tsize.y);
-			else if (textAlign.Vertical == Enums::Alignment::Center)
-				spos.y += (destination.Size.y - tsize.y) / 2;
+			else if (textAlign.Vertical == RUI::Alignment::Center)
+				spos.y = destination.Position.y + ((destination.Size.y - tsize.y) / 2);
 
 			return spos;
 		}
 	};
-	   
+	float UI::fBlendFactor = 1.0f;
+
 	/* SolidBackground: creates a control background of a solid color */
 	class SolidBackground : public UIBackground
 	{
@@ -318,69 +356,73 @@ namespace RasputinUI
 		}
 		void Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) override
 		{
-			pge->FillRectDecal(area.Position, area.Size, Color);
+			olc::Pixel::Mode pMode = pge->GetPixelMode();
+			//pge->SetPixelMode(olc::Pixel::ALPHA);
+			pge->SetPixelMode(UI::TrueAlpha);
+			pge->FillRect(area.Position, area.Size, Color);
+			pge->SetPixelMode(pMode);
 		}
 	};
 	SolidBackground* SolidBackground::BLANK = new SolidBackground(olc::BLANK);
 
 	/* DecalBackground: creates a control background with a single decal.  It can be scaled, tinted, and aligned */
-	class DecalBackground : public UIBackground
+	class SpriteBackground : public UIBackground
 	{
 	private:
-		DecalBackground();
+		SpriteBackground();
 	public:
-		olc::Decal* oDecal;
+		olc::Sprite* oSprite;
 		FullAlignment ImageAlignment;
-		olc::vf2d ImageScale;
-		olc::Pixel Tint = olc::WHITE; 
+		int ImageScale;
+		//olc::Pixel Tint = olc::WHITE;
 
-		DecalBackground(olc::Decal* decal, FullAlignment alignment = { Enums::Alignment::Center, Enums::Alignment::Center }, olc::vf2d scale = { 1,1 }, olc::Pixel tint = olc::WHITE)
+		SpriteBackground(olc::Sprite* sprite, FullAlignment alignment = { RUI::Alignment::Center, RUI::Alignment::Center }, int scale = 1/*, olc::Pixel tint = olc::WHITE*/)
 		{
-			oDecal = decal;
+			oSprite = sprite;
 			ImageAlignment = alignment;
 			ImageScale = scale;
-			Tint = tint;
+			//Tint = tint;
 		}
 
 		void Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) override
 		{
 			olc::vf2d spos = area.Position;
-			olc::vi2d dsize = { oDecal->sprite->width, oDecal->sprite->height };
+			olc::vi2d dsize = { oSprite->width, oSprite->height };
 			dsize *= ImageScale;
-			if (ImageAlignment.Horizontal == Enums::Alignment::Far)
+			if (ImageAlignment.Horizontal == RUI::Alignment::Far)
 				spos.x = (float)(area.right() - dsize.x);
-			else if (ImageAlignment.Horizontal == Enums::Alignment::Center)
+			else if (ImageAlignment.Horizontal == RUI::Alignment::Center)
 				spos.x += (area.Size.x - dsize.x) / 2;
 
-			if (ImageAlignment.Vertical == Enums::Alignment::Far)
+			if (ImageAlignment.Vertical == RUI::Alignment::Far)
 				spos.y = (float)(area.bottom() - dsize.y);
-			else if (ImageAlignment.Vertical == Enums::Alignment::Center)
+			else if (ImageAlignment.Vertical == RUI::Alignment::Center)
 				spos.y += (area.Size.y - dsize.y) / 2;
 
-			pge->DrawDecal(spos, oDecal, ImageScale, Tint);
+			pge->DrawSprite(spos, oSprite, ImageScale);
 		}
 	};
 
 	/* TiledDecalBackground: creates a control background that tiles a decal on the X and Y axis.  It can be scaled and tinted */
-	class TiledDecalBackground : public UIBackground
+	class TiledSpriteBackground : public UIBackground
 	{
 	private:
-		TiledDecalBackground();
+		TiledSpriteBackground();
 	public:
-		olc::Decal* oDecal;
-		olc::vf2d ImageScale;
-		olc::Pixel Tint = olc::WHITE; 
+		olc::Sprite* oSprite;
+		int ImageScale;
+		//olc::Pixel Tint = olc::WHITE;
 
-		TiledDecalBackground(olc::Decal* decal, olc::vf2d scale = { 1,1 }, olc::Pixel tint = olc::WHITE)
+		TiledSpriteBackground(olc::Sprite* decal, int scale = 1 /*, olc::Pixel tint = olc::WHITE*/)
 		{
-			oDecal = decal;
+			oSprite = decal;
 			ImageScale = scale;
-			Tint = tint;
+			//Tint = tint;
 		}
 
 		void Render(olc::PixelGameEngine* pge, Rect area, float fElapsedTime) override
 		{
-			olc::vi2d dsize = { oDecal->sprite->width, oDecal->sprite->height };
+			olc::vi2d dsize = { oSprite->width, oSprite->height };
 			dsize *= ImageScale;
 
 			int cols = area.Size.x / dsize.x;
@@ -400,14 +442,14 @@ namespace RasputinUI
 
 					olc::vi2d loc1 = { area.Position.x + x,area.Position.y + y };
 					olc::vi2d siz1 = { w,h };
-					pge->DrawPartialDecal(loc1, oDecal, { 0,0 }, siz1, ImageScale, Tint);
+					pge->DrawPartialSprite(loc1, oSprite, { 0,0 }, siz1, ImageScale);
 
 				}
 			}
 		}
 	};
 
-	/* ControlBase: the base control for the UI system. 
+	/* ControlBase: the base control for the UI system.
 		This can be used as a label, a panel, a button, an image, just about anything.
 		You can also derive from it and create addition custom controls, as well as build composite controls.
 	*/
@@ -417,11 +459,15 @@ namespace RasputinUI
 		/* Location: The controls location and size, relative to its parent */
 		Rect Location;
 
+		bool CanvasValid = false;
+
+		std::string Text;
+
 	public:
 		/* PopToTop: use this function to grab the top level parent of this control and pop him to the front of z order */
-		virtual void PopToTop() 
+		virtual void PopToTop()
 		{
-			if (Parent && Parent->Parent == NULL)  
+			if (Parent && Parent->Parent == NULL)
 			{
 				Parent->Controls.remove(this);
 				Parent->Controls.push_back(this);
@@ -439,6 +485,10 @@ namespace RasputinUI
 			OnMove.Invoke(this);
 		}
 
+		void SetPosition(int x, int y)
+		{
+			SetPosition({ x,y });
+		}
 		/* Position: get the position of the control, relative to its parent */
 		olc::vi2d Position()
 		{
@@ -448,14 +498,24 @@ namespace RasputinUI
 		/* SetSize: set the size of the control */
 		void SetSize(int w, int h)
 		{
-			Location.Size = { w, h };
+			SetSize({ w, h });
+		}
+		void SetSize(olc::vi2d size)
+		{
+			Location.Size = size;
 			OnResize.Invoke(this);
+			Invalidate();
 		}
 
 		/* Size: get the size of the control */
 		olc::vi2d Size()
 		{
 			return Location.Size;
+		}
+
+		void Invalidate()
+		{
+			CanvasValid = false;
 		}
 
 		/* OnClick: Event handler, invoked when any (left,right,middle) mouse buttons are pressed while over this control, AND it was enabled. */
@@ -480,13 +540,21 @@ namespace RasputinUI
 		EventHandler OnResize;
 
 		/* Parent: The control's parent if any */
-		ControlBase *Parent = NULL;
+		ControlBase* Parent = NULL;
 
 		/* Theme: the ControlTheme for this control */
 		ControlTheme Theme;
 
 		/* Text: Any text to display on this control.  Text Scale and Text Align will be used to determine its size and location */
-		std::string Text;
+		std::string GetText() {return Text;}
+		void SetText(std::string val)
+		{ 
+			if (Text != val)
+			{
+				Text = val;
+				Invalidate();
+			}
+		}
 
 		/* Active: wether the control is currently "Active" is used for an additional state to be used differently as needed.  In list items, it can serve as the selected item color, for example. */
 		bool Active = false;
@@ -510,7 +578,7 @@ namespace RasputinUI
 		bool Hovering = false;
 
 		/* Constructor: Basic constructor for a control to create it within a parent */
-		ControlBase(Rect location, ControlBase *parent = NULL)
+		ControlBase(Rect location, ControlBase* parent = NULL)
 		{
 			Theme.Default.ForegroundColor = olc::WHITE;
 			Location = location;
@@ -522,7 +590,7 @@ namespace RasputinUI
 		}
 
 		/* Constructor: create a control within a parent and set its theme */
-		ControlBase(Rect location, ControlTheme theme, ControlBase *parent = NULL)
+		ControlBase(Rect location, ControlTheme theme, ControlBase* parent = NULL)
 		{
 			Location = location;
 			Parent = parent;
@@ -538,7 +606,7 @@ namespace RasputinUI
 		ControlBase() { Theme.Default.ForegroundColor = olc::WHITE; } // just so by default objects show text
 
 		/* MouseOver: meant to be handled in the OnUserUpdate call in olcPixelGameEngine, with the mouse coordinates, to handle mouse interaction */
-		virtual ControlBase *MouseOver(olc::vi2d mpos)
+		virtual ControlBase* MouseOver(olc::vi2d mpos)
 		{
 			if (Visible)
 			{
@@ -547,11 +615,9 @@ namespace RasputinUI
 				sRect.Size = Location.Size;
 				if (Enabled && sRect.Contains(mpos))
 				{
-					std::list<ControlBase *> tmpControls = Controls;
-					tmpControls.reverse();
-					for (auto control : tmpControls)
+					for (std::list<ControlBase*>::reverse_iterator control = Controls.rbegin(); control != Controls.rend(); ++control)
 					{
-						ControlBase* res = control->MouseOver(mpos);
+						ControlBase* res = (*control)->MouseOver(mpos);
 						if (res != NULL)
 						{
 							Hovering = false;
@@ -573,43 +639,43 @@ namespace RasputinUI
 		}
 
 		/* Focus: Give this control input focus. */
-		virtual void Focus() 
+		virtual void Focus()
 		{
 			OnFocus.Invoke(this);
 		};
 
 		/* Blur: remove the current input focus. */
-		virtual void Blur() 
+		virtual void Blur()
 		{
 			OnBlur.Invoke(this);
 		};
 
 		/* MouseEnter: The mouse started hovering over your control. */
-		virtual void MouseEnter() 
+		virtual void MouseEnter()
 		{
 			OnMouseEnter.Invoke(this);
 		};
 
 		/* MouseLeave: The mouse was hovering over your control, and has now left. */
-		virtual void MouseLeave() 
+		virtual void MouseLeave()
 		{
 			OnMouseLeave.Invoke(this);
 		};
 
 		/* MouseDown: Event when a mouse is in the bPressed state on this control. */
-		virtual void MouseDown(int mButton) 
+		virtual void MouseDown(int mButton)
 		{
 			OnMouseDown.Invoke(this, mButton);
 		};
 
 		/* MouseUp: Event when a mouse is in the bReleased state, to the control previously notified by mousedown. */
-		virtual void MouseUp(int mButton) 
+		virtual void MouseUp(int mButton)
 		{
 			OnMouseUp.Invoke(this, mButton);
 		};
 
 		/* MouseMove: The mouse moved. */
-		virtual void MouseMove() 
+		virtual void MouseMove()
 		{
 			OnMouseMove.Invoke(this);
 		};
@@ -635,7 +701,7 @@ namespace RasputinUI
 		{
 			int x = 0;
 			int y = 0;
-			ControlBase *cb = this;
+			ControlBase* cb = this;
 			while (cb != NULL)
 			{
 				x += cb->Location.Position.x;
@@ -645,20 +711,82 @@ namespace RasputinUI
 			return { x,y };
 		}
 
+		int GetStateVal()
+		{
+			if (!Enabled)
+				return 3;
+			else if (Active)
+				return 2;
+			else if (Hovering)
+				return 1;
+			return 0;
+		}
+
+
+		olc::Renderable mCanvas;
+		int lastStateVal = 0;;
 		/* Render: How we draw!  This can be completely overridden, and each piece can be as well,
 		   DrawBackground, DrawCustom, and DrawText are called, in that order, and are all virtual and can be overridden */
 		friend class UIManager;
-		virtual void Render(olc::PixelGameEngine* pge, float fElapsedTime)
+		virtual void Render(olc::PixelGameEngine* pge, float fElapsedTime, Rect clip)
 		{
 			if (Visible)
 			{
-				DrawBackground(pge, fElapsedTime);
-				DrawCustom(pge, fElapsedTime);
-				DrawText(pge, fElapsedTime);
-
-				for (auto control : Controls)
+				ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
+				if (lastStateVal != GetStateVal())
 				{
-					control->Render(pge, fElapsedTime);
+					Invalidate();
+					lastStateVal = GetStateVal();
+				}
+				// if we dont intersect with the clip, or the clip or our size is 0 in both dimensions, dont bother!
+				if (clip.Intersects({ ScreenPos(),Location.Size }) && !clip.IsEmpty() && !Location.IsEmpty())
+				{
+					if (!CanvasValid || mCanvas.Sprite() == NULL)
+					{
+						mCanvas.Create(Location.Size.x, Location.Size.y);
+						olc::Sprite* dtarget = pge->GetDrawTarget();
+						pge->SetDrawTarget(mCanvas.Sprite());
+						olc::Pixel::Mode pMode = pge->GetPixelMode();
+						//pge->SetPixelMode(olc::Pixel::ALPHA);
+						pge->SetPixelMode(UI::TrueAlpha);
+						pge->Clear(olc::BLANK);
+						DrawBackground(pge, fElapsedTime);
+						DrawCustom(pge, fElapsedTime);
+						DrawText(pge, fElapsedTime);
+						mCanvas.Decal()->Update();
+						pge->SetPixelMode(pMode);
+						pge->SetDrawTarget(dtarget);
+						CanvasValid = true;
+					}
+
+					Rect ClientClip = GetClientRect(); // so we can adjust our clip as we go
+
+					if (!clip.ContainsRect({ ScreenPos(),Location.Size }))
+					{
+						//clip here  // keep this note here so we can add scroll bar handling here!
+						olc::vi2d loc = ScreenPos();
+						olc::vi2d bounds = Location.Size;
+						int myright = loc.x + Location.Size.x;
+						int mybot = loc.y + Location.Size.y;
+						if (clip.right() < myright)
+						{
+							bounds.x -= (myright - clip.right()) + 1;
+							ClientClip.Size.x = bounds.x;
+						}
+						if (clip.bottom() < mybot)
+						{
+							bounds.y -= (mybot - clip.bottom()) + 1;
+							ClientClip.Size.y = bounds.y;
+						}
+						pge->DrawPartialDecal(ScreenPos(), mCanvas.Decal(), { 0,0 }, bounds);
+					}
+					else
+						pge->DrawDecal(ScreenPos(), mCanvas.Decal());
+
+					for (auto control : Controls)
+					{
+						control->Render(pge, fElapsedTime, ClientClip);
+					}
 				}
 			}
 		}
@@ -679,7 +807,7 @@ namespace RasputinUI
 
 		/* DrawBackground: The basic draw background, which fills the control with BackgroundColor.
 			It will also draw BackgroundDecal if one is available, using the current scaling and alignment settings	*/
-		virtual void DrawBackground(olc::PixelGameEngine *pge, float fElapsedTime)
+		virtual void DrawBackground(olc::PixelGameEngine* pge, float fElapsedTime)
 		{
 			if (Visible)
 			{
@@ -687,26 +815,25 @@ namespace RasputinUI
 
 				if (cs.Background)
 				{
-					cs.Background->Render(pge, { ScreenPos(), Location.Size }, fElapsedTime);
+					cs.Background->Render(pge, { {0,0}, Location.Size }, fElapsedTime);
 				}
-				if (cs.BorderType != Enums::BorderType::None)
-					UI::DrawBevel(pge, cs.BorderType, GetClientRect());
+				if (cs.BorderType != RUI::BorderType::None)
+					UI::DrawBevel(pge, cs.BorderType, { {0,0},Location.Size });
 			}
 		}
 
 		/* DrawCustom: A layer to draw anything needed for custom controls, sits between the foreground and background. */
-		virtual void DrawCustom(olc::PixelGameEngine *pge, float fElapsedTime) { }
+		virtual void DrawCustom(olc::PixelGameEngine* pge, float fElapsedTime) { }
 
 		/* DrawText: The text positioning and drawing layer, handles proper color, scaling, position. */
-		virtual void DrawText(olc::PixelGameEngine *pge, float fElapsedTime)
+		virtual void DrawText(olc::PixelGameEngine* pge, float fElapsedTime)
 		{
 			if (Visible)
 			{
 				if (Text.length() > 0)
 				{
 					ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
-					olc::vf2d spos = UI::AlignTextIn(pge, Text, GetClientRect(), cs.TextAlign, cs.TextScale);
-					//pge->DrawStringDecal(spos, Text, cs.ForegroundColor, cs.TextScale);
+					olc::vf2d spos = UI::AlignTextIn(pge, Text, { {cs.Padding.left,cs.Padding.right}, GetClientRect().Size }, cs.TextAlign, cs.TextScale);
 					UI::OutputText(pge, spos, GetClientRect().Size, Text, cs);
 				}
 			}
@@ -726,8 +853,13 @@ namespace RasputinUI
 		{
 			pge = engine;
 		}
-		
+
 		EventHandler OnDrag;
+
+		void Render(olc::PixelGameEngine* pge, float fElapsedTime)
+		{
+			return;
+		}
 
 		bool bDragging = false;
 		olc::vi2d mLoc;
@@ -753,7 +885,7 @@ namespace RasputinUI
 			{
 				if (DragControl != NULL)
 				{
-					
+
 					olc::vi2d cloc = pge->GetMousePos();
 
 					olc::vi2d pos = DragControl->Position();
@@ -770,7 +902,7 @@ namespace RasputinUI
 					}
 					else if (BoundingRectangle.ContainsRect({ pos,DragControl->Size() })) // if we are in the rect
 					{
-						DragControl->SetPosition({pos.x, pos.y});
+						DragControl->SetPosition({ pos.x, pos.y });
 						mLoc = cloc;
 					}
 					else if (BoundingRectangle.ContainsRect({ xopos,DragControl->Size() })) // try only moving x
@@ -831,15 +963,15 @@ namespace RasputinUI
 				{
 					olc::vi2d cloc = pge->GetMousePos();
 					olc::vi2d sz = ResizeControl->Size();
-					int xamt = sz.x+(cloc.x - mLoc.x);
-					int yamt = sz.y+(cloc.y - mLoc.y);
+					int xamt = sz.x + (cloc.x - mLoc.x);
+					int yamt = sz.y + (cloc.y - mLoc.y);
 
 					if (xamt >= MinimumSize.x && (xamt < MaximumSize.x || MaximumSize.x == 0))
 						sz.x = xamt;
 					if (yamt >= MinimumSize.y && (yamt < MaximumSize.y || MaximumSize.y == 0))
 						sz.y = yamt;
 
-					ResizeControl->SetSize(sz.x,sz.y);
+					ResizeControl->SetSize(sz.x, sz.y);
 					mLoc = cloc;
 				}
 			}
@@ -944,7 +1076,7 @@ namespace RasputinUI
 				unsigned int ridx = i + TopIndex;
 				if (ridx < Items.size())
 				{
-					ListItems.at(i)->Text = Items.at(ridx);
+					ListItems.at(i)->SetText(Items.at(ridx));
 					ListItems.at(i)->Active = (ridx == SelectedIndex);
 					ListItems.at(i)->ApplyTheme(ItemTheme);
 				}
@@ -962,7 +1094,7 @@ namespace RasputinUI
 		int TopIndex = 0; // our scroll position
 
 		/* ListItems: the controls on the screen that display the current selection of Items */
-		std::vector<ControlBase *> ListItems;
+		std::vector<ControlBase*> ListItems;
 
 		/* createListItems: this recreates all of the controls that are used for the display after the list changes */
 		void createListItems()
@@ -989,12 +1121,11 @@ namespace RasputinUI
 		int SelectedIndex = -1;
 
 	protected:
-		std::function<void(ControlBase*,int)> itemClickedBind;
+		std::function<void(ControlBase*, int)> itemClickedBind;
 		/* ItemClicked: Callback function to handle item selection */
 		void ItemClicked(ControlBase* control, int mButton)
 		{
-			// find the index of the string
-			std::string tofind = control->Text;
+			std::string tofind = control->GetText();
 			for (unsigned int i = 0; i < Items.size(); i++)
 			{
 				if (Items.at(i).compare(tofind) == 0)
@@ -1031,16 +1162,16 @@ namespace RasputinUI
 		ControlBase* curControl = NULL;
 
 		/* m_controls: a list of all of the controls that UIManager has been asked to manage, and clean up */
-		std::vector<ControlBase *> m_controls;
+		std::vector<ControlBase*> m_controls;
 
 		/* focusControl: The control that currently has input focus. */
 		ControlBase* focusControl = NULL;
 	public:
 		/* the control for the UI manager*/
-		ControlBase *mainControl;
+		ControlBase* mainControl;
 
 		/* FocusControl: The control that currently has input focus. */
-		ControlBase *FocusControl() { return focusControl; }
+		ControlBase* FocusControl() { return focusControl; }
 
 		/* Descructor: clean up (or try) all of the controls you were managing. */
 		~UIManager()
@@ -1059,13 +1190,13 @@ namespace RasputinUI
 		olc::vi2d lastmouse = { 0,0 };
 
 		/* mDownControl: the last control to get an mDownEvent */
-		ControlBase *mDownControl = NULL; 
+		ControlBase* mDownControl = NULL;
 
 		/* UpdateUI: the main update loop for the ui, to be called by OnUserUpdate in the game loop. */
-		void OnBeforeUserUpdate(float &fElapsedTime) override
+		void OnBeforeUserUpdate(float& fElapsedTime) override
 		{
 			olc::vi2d mpos = olc::PGEX::pge->GetMousePos();
-			
+
 			if (mpos != lastmouse)
 			{
 				lastmouse = mpos;
@@ -1079,7 +1210,7 @@ namespace RasputinUI
 			if (curControl && curControl->Hovering)
 				curControl->Hovering = false; // we will set it in the next call anyway, just makes sure we dont get "stuck" hovers
 
-			ControlBase *nControl = NULL;
+			ControlBase* nControl = NULL;
 
 			nControl = mainControl->MouseOver(mpos);
 			if (nControl != curControl)
@@ -1099,7 +1230,7 @@ namespace RasputinUI
 				focusControl->HandleFocusInput(olc::PGEX::pge, fElapsedTime);
 			}
 
-			mainControl->Render(olc::PGEX::pge, fElapsedTime);
+			mainControl->Render(olc::PGEX::pge, fElapsedTime, { {0,0},{pge->ScreenWidth(),pge->ScreenHeight()} });
 
 			for (int i = 0; i < 3; i++)
 			{
@@ -1142,7 +1273,7 @@ namespace RasputinUI
 		}
 
 		/* CreateControl: use this to create a default control and add it to the parent at the specified location. */
-		ControlBase *CreateControl(Rect location, ControlBase* parent = NULL)
+		ControlBase* CreateControl(Rect location, ControlBase* parent = NULL)
 		{
 			ControlBase* result = new ControlBase(location, parent);
 			m_controls.push_back(result);
@@ -1150,7 +1281,7 @@ namespace RasputinUI
 		}
 
 		/* CreateControl: use this to create a themed control and add it to the parent at the specified location. */
-		ControlBase *CreateControl(Rect location, ControlTheme theme, ControlBase* parent = NULL)
+		ControlBase* CreateControl(Rect location, ControlTheme theme, ControlBase* parent = NULL)
 		{
 			ControlBase* result = CreateControl(location, parent);
 			result->ApplyTheme(theme);
@@ -1163,10 +1294,7 @@ namespace RasputinUI
 		{
 			m_controls.push_back(control);
 		}
-
-		static olc::Sprite* ScratchPad;
 	};
-	olc::Sprite* UIManager::ScratchPad = new olc::Sprite(512, 512);
 
 	/* TextEdit : a simplified text entry field.  Check keyList for list of supported keys. */
 	class TextEdit : public ControlBase
@@ -1201,7 +1329,7 @@ namespace RasputinUI
 		int Factor = 1;
 
 		/* Pace: The speed at which the pulse occurs.  Pace * fElapsedTime is added or subtracted from the alpha of the background until it reaches the limit, then changes direction */
-		int Pace = 500;
+		int Pace = 900;
 
 	public:
 		std::function<void(ControlBase*, std::string)> OnTextChanged;
@@ -1216,28 +1344,21 @@ namespace RasputinUI
 		}
 
 	protected:
+
+		void Render(olc::PixelGameEngine* pge, float fElapsedTime, Rect clip) override
+		{
+			adjustFlasher(fElapsedTime); 
+			ControlBase::Render(pge, fElapsedTime, clip);
+		}
+
 		/* DrawText: overridden to handle all text input and the editing of the string within the text box */
 		void DrawText(olc::PixelGameEngine* pge, float fElapsedTime) override
 		{
-			adjustFlasher(fElapsedTime);
 			Rect pos = GetClientRect();
 			ControlStyle cs = Theme.GetStyle(Enabled, Hovering, Active);
 			if (!focused)
 			{
-				olc::vi2d negsize = pge->GetTextSize("WW"); // use this to determine when we have less than 2 characters 
-				negsize = { (int)(negsize.x * cs.TextScale.x),(int)(negsize.y * cs.TextScale.y) };
-
-				std::string displaytext = Text;
-				olc::vi2d size = pge->GetTextSize(displaytext);
-				size = { (int)(size.x * cs.TextScale.x), (int)(size.y * cs.TextScale.y) };
-				if (size.x >= pos.Size.x)
-				{
-					int amt = std::max(1, 2 * (pos.Size.x / negsize.x));
-					displaytext = displaytext.substr(0, amt);
-				}
-
-				olc::vf2d textpos = UI::AlignTextIn(pge, displaytext, pos, cs.TextAlign, cs.TextScale);
-				pge->DrawStringDecal(textpos, displaytext, cs.ForegroundColor, cs.TextScale);
+				ControlBase::DrawText(pge, fElapsedTime);
 			}
 			else
 			{
@@ -1247,7 +1368,7 @@ namespace RasputinUI
 
 				if (Text.length() == 0)
 				{
-					pge->FillRectDecal({ (float)pos.Position.x + 3, (float)pos.Position.y + 2 }, { (float)2,(float)pos.Size.y - 4 }, olc::Pixel(CursorColor.r, CursorColor.g, CursorColor.b, Alpha));
+					pge->FillRect({ pos.Position.x + 3, pos.Position.y + 2 }, { 2,pos.Size.y - 4 }, olc::Pixel(CursorColor.r, CursorColor.g, CursorColor.b, Alpha));
 				}
 				else
 				{
@@ -1267,18 +1388,20 @@ namespace RasputinUI
 						size = pge->GetTextSize(displaytext);
 						size = { (int)(size.x * cs.TextScale.x), (int)(size.y * cs.TextScale.y) };
 					}
-					olc::vf2d textpos = UI::AlignTextIn(pge, displaytext, pos, cs.TextAlign, cs.TextScale);
-					pge->DrawStringDecal(textpos, displaytext, cs.ForegroundColor, cs.TextScale);
-					pge->FillRectDecal({ (float)pos.Position.x + size.x + 1, (float)pos.Position.y + 2 }, { (float)2,(float)pos.Size.y - 4 }, olc::Pixel(CursorColor.r, CursorColor.g, CursorColor.b, Alpha));
+					olc::vi2d off = { cs.Padding.left,cs.Padding.top };
+					olc::vf2d textpos = UI::AlignTextIn(pge, displaytext, { { cs.Padding.left,cs.Padding.top },pos.Size }, cs.TextAlign, cs.TextScale);
+					pge->DrawString(textpos, displaytext, cs.ForegroundColor, cs.TextScale.x);
+					pge->FillRect({ off.x + size.x + 1, off.y + 2 }, { 2,pos.Size.y - 4 }, olc::Pixel(CursorColor.r, CursorColor.g, CursorColor.b, Alpha));
 				}
 			}
 		}
 
 		/* appendInput: check for any keys and append them to Text if there are any pressed that we care about, returns a bool indicating if any input caused Text to change */
-		bool appendInput(olc::PixelGameEngine *pge)
+		bool appendInput(olc::PixelGameEngine* pge)
 		{
 			bool changed = false;
 			bool shifted = pge->GetKey(olc::SHIFT).bPressed || pge->GetKey(olc::SHIFT).bHeld;
+			std::string nstring = Text;
 			for (int i = 0; i < 41; i++)
 			{
 				if (pge->GetKey(keyList[i]).bPressed)
@@ -1287,7 +1410,8 @@ namespace RasputinUI
 					{
 						if (Text.length() > 0)
 						{
-							Text = Text.substr(0, Text.length() - 1);
+							nstring = nstring.substr(0, nstring.length() - 1);
+							//SetText(Text.substr(0, Text.length() - 1));
 							changed = true;
 						}
 					}
@@ -1295,18 +1419,21 @@ namespace RasputinUI
 					{
 						changed = true;
 						if (shifted)
-							Text += keyValues[i];
+							nstring += keyValues[i];
 						else
-							Text += keyValues[i + 41];
+							nstring += keyValues[i + 41];
 					}
 				}
 			}
+			if (changed)
+				SetText(nstring);
 			return changed;
 		}
 
 		/* adjustFlasher: updates the pulse of the cursor */
 		void adjustFlasher(float fElapsedTime)
 		{
+			int cur_alpha = Alpha;
 			int amt = (int)(Pace * fElapsedTime);
 			int a = Alpha + (amt * Factor);
 			if (a > 255)
@@ -1320,19 +1447,30 @@ namespace RasputinUI
 				Factor *= -1;
 			}
 			Alpha = a;
+			if (cur_alpha != a)
+				Invalidate();
 		}
 
 		/* Focus: overridden to handle focus */
 		void Focus() override
 		{
 			focused = true;
+			Invalidate();
 		}
 
 		/* Blur: overridden to handle focus */
 		void Blur() override
 		{
 			focused = false;
+			Invalidate();
 		}
+	};
+
+	/* abstract class to be used for handling relayout of client area*/
+	class LayoutManager
+	{
+	public:
+
 	};
 
 	/* Horizontal Slider: for normal use, later for scroll bar use */
@@ -1342,6 +1480,7 @@ namespace RasputinUI
 		int value = 0;
 		int minimum = 0;
 		int maximum = 255;
+		RUI::Orientation orientation = RUI::Horizontal;
 	public:
 
 		int GetValue() { return value; }
@@ -1355,6 +1494,13 @@ namespace RasputinUI
 			}
 		}
 
+		RUI::Orientation GetOrientation() { return orientation; }
+		void SetOrientation(RUI::Orientation newOrientation)
+		{
+			orientation = newOrientation;
+			Relayout();
+		}
+
 		int GetMinimum() { return minimum; }
 		void SetMinimum(int min) { minimum = min; SetPosition(); }
 
@@ -1363,39 +1509,85 @@ namespace RasputinUI
 
 		EventHandler1Param<int> OnValue;
 
-		ControlBase* track;
-		DragHandle* dragger;
-		Slider(Rect location, ControlBase* parent, int min, int max, int current, olc::PixelGameEngine *pge)
+		Slider(Rect location, ControlBase* parent, int min, int max, int current, olc::PixelGameEngine* pge)
 			: ControlBase(location, parent)
 		{
-			Theme.Default.BorderType = Enums::BorderType::Sunken;
+			Theme.Default.BorderType = RUI::BorderType::Sunken;
 			minimum = min;
 			maximum = max;
 			value = current;
 			track = new ControlBase({ {2,2}, {location.Size.y - 4,location.Size.y - 4 } }, this);
-			track->Theme.Default.BorderType = Enums::BorderType::Raised;
+			track->Theme.Default.BorderType = RUI::BorderType::Raised;
 
 			dragger = new DragHandle({ {0,0},track->Size() }, track, pge);
 			dragger->DragControl = track;
-			dragger->BoundingRectangle = { {2,2},{ Size().x - 3, location.Size.y - 3} };
-			SetPosition();
+			Relayout();
 
 			dragger->OnDrag.Subscribe([&](RasputinUI::ControlBase* sender) {
-				int nx = track->Position().x - 2;
-				int totsize = Size().x - (dragger->Size().x + 4);
-
-				int per = (nx * 100) / totsize;
-				value = (((maximum - minimum) * per) / 100) + minimum;
-				OnValue.Invoke(this, value);
-				Text = std::to_string(value);
-				});
+				PositionChanged();
+				SetText(std::to_string(value));
+			});
 		}
 
 	private:
+		ControlBase* track;
+		DragHandle* dragger;
 		void SetPosition()
 		{
 			float per = (((float)value) * 100) / ((float)maximum);
 			track->SetPosition({ (int)((Location.Size.x * per) / 100) - (track->Size().x / 2), track->Position().y });
+		}
+
+		void Relayout() // size or orientation changed... fix it!
+		{
+			if (orientation == RUI::Orientation::Horizontal)
+			{
+				track->SetSize({ Location.Size.y - 4, Location.Size.y - 4 });
+
+				dragger->SetSize(track->Size());
+				dragger->BoundingRectangle = { {2,2},{ Size().x - 4, Location.Size.y - 4} };
+				SetPosition();
+			}
+			else
+			{
+				track->SetSize({ Location.Size.x - 4, Location.Size.x - 4 });
+
+				dragger->SetSize(track->Size());
+				dragger->BoundingRectangle = { {2,2},{ Location.Size.x - 4, Size().y - 4 } };
+				SetPosition();
+			}
+		}
+
+		void PositionChanged()
+		{
+			if (orientation == RUI::Orientation::Horizontal)
+			{
+				int nx = track->Position().x - 2;
+				int totsize = Size().x - (dragger->Size().x + 4);
+
+				int per = (nx * 100) / totsize;
+				int nvalue = (((maximum - minimum) * per) / 100) + minimum;
+				nvalue = std::min(maximum, std::max(minimum, nvalue));
+				if (nvalue != value)
+				{
+					value = nvalue;
+					OnValue.Invoke(this, value);
+				}
+			}
+			else
+			{
+				int ny = track->Position().y - 2;
+				int totsize = Size().y - (dragger->Size().y + 4);
+
+				int per = (ny * 100) / totsize;
+				int nvalue = (((maximum - minimum) * per) / 100) + minimum;
+				nvalue = std::min(maximum, std::max(minimum, nvalue));
+				if (nvalue != value)
+				{
+					value = nvalue;
+					OnValue.Invoke(this, value);
+				}
+			}
 		}
 
 	};
